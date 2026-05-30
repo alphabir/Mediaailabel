@@ -1,0 +1,6 @@
+{
+  "name": "MediaForge",
+  "description": "MediaForge is a unified serverless video processing and AI annotation pipeline API for developers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
