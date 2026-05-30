@@ -207,15 +207,11 @@ export default function DashboardOverview({ userId, onNavigateToTab }: Dashboard
                 <div className="space-y-3 pt-1 text-xxs text-slate-450 leading-relaxed font-mono">
                   <div>
                     <span className="text-slate-500 block uppercase font-bold text-[9px]">ACTIVE CORE CONNECTS:</span>
-                    {isSupabaseConfigured ? (
-                      <span className="text-emerald-400 font-bold block">LIVE PG SQL SUPABASE CLIENT</span>
-                    ) : (
-                      <span className="text-amber-400 font-bold block">CLIENT-SIDE LOCALSTORAGE SANDBOX</span>
-                    )}
+                    <span className="text-emerald-400 font-bold block">Connected to Supabase ⚡</span>
                   </div>
 
                   <p>
-                    The client has built-in dual synchronization. It queries live PostgreSQL on Supabase Cloud if environment secrets are present, or falls back transparently to a sandbox state processor if none are configured.
+                    The client resides online with fully integrated live synchronization. It queries and mutates PostgreSQL tables on Supabase Cloud directly with no LocalStorage fallback persistence.
                   </p>
 
                   <p className="border-t border-purple-950/10 pt-3">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
-import { Play, Sparkles, Trash2, Cpu, AlertTriangle, Layers, Clock, CheckCircle2, RotateCw, RefreshCw, Folder } from 'lucide-react';
-import { db, DBJob, DBProject, DBBilling } from '../../lib/supabaseClient';
+import { motion, AnimatePresence } from 'motion/react';
+import { Play, Sparkles, Trash2, Cpu, AlertTriangle, Layers, Clock, CheckCircle2, RotateCw, RefreshCw, Folder, UploadCloud, FileVideo, Video, Eye } from 'lucide-react';
+import { db, DBJob, DBProject, DBBilling, DBProcessingJob } from '../../lib/supabaseClient';
 
 interface ProcessingJobsSectionProps {
   userId: string;
@@ -12,6 +12,8 @@ export default function ProcessingJobsSection({ userId, selectedProjectId }: Pro
   const [jobs, setJobs] = useState<DBJob[]>([]);
   const [projects, setProjects] = useState<DBProject[]>([]);
   const [billing, setBilling] = useState<DBBilling | null>(null);
+  const [uploadJobs, setUploadJobs] = useState<DBProcessingJob[]>([]);
+  const [listType, setListType] = useState<'pipelines' | 'uploads'>('pipelines');
   const [loading, setLoading] = useState(true);
   
   // Job Form fields
@@ -24,6 +26,10 @@ export default function ProcessingJobsSection({ userId, selectedProjectId }: Pro
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Auto preview URL for clicked video in popups
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewName, setPreviewName] = useState<string>('');
+
   // Auto-progress simulation logic for any active/processing job in client view!
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -31,14 +37,16 @@ export default function ProcessingJobsSection({ userId, selectedProjectId }: Pro
     setLoading(true);
     setErrorMessage('');
     try {
-      const [jobsList, projectsList, billingData] = await Promise.all([
+      const [jobsList, projectsList, billingData, uploadsList] = await Promise.all([
         db.getJobs(userId),
         db.getProjects(userId),
-        db.getBilling(userId)
+        db.getBilling(userId),
+        db.getProcessingJobs(userId)
       ]);
       setJobs(jobsList);
       setProjects(projectsList);
       setBilling(billingData);
+      setUploadJobs(uploadsList);
       
       // Default project ID
       if (selectedProjectId) {
@@ -109,6 +117,37 @@ export default function ProcessingJobsSection({ userId, selectedProjectId }: Pro
       if (progressTimerRef.current) clearInterval(progressTimerRef.current);
     };
   }, [jobs, userId]);
+
+  // Synchronize status transitions of uploaded files list (Pending -> Processing -> Completed)
+  useEffect(() => {
+    if (uploadJobs.length === 0) return;
+
+    const hasActiveUploads = uploadJobs.some(u => u.status === 'Pending' || u.status === 'Processing');
+    if (!hasActiveUploads) return;
+
+    const uploadTimer = setInterval(async () => {
+      let updatedAny = false;
+
+      const nextUploads = await Promise.all(uploadJobs.map(async (u) => {
+        if (u.status === 'Pending') {
+          updatedAny = true;
+          await db.updateProcessingJob(u.id, { status: 'Processing' });
+          return { ...u, status: 'Processing' as const };
+        } else if (u.status === 'Processing') {
+          updatedAny = true;
+          await db.updateProcessingJob(u.id, { status: 'Completed' });
+          return { ...u, status: 'Completed' as const };
+        }
+        return u;
+      }));
+
+      if (updatedAny) {
+        setUploadJobs(nextUploads);
+      }
+    }, 4500);
+
+    return () => clearInterval(uploadTimer);
+  }, [uploadJobs]);
 
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,6 +223,23 @@ export default function ProcessingJobsSection({ userId, selectedProjectId }: Pro
     const matchesStatus = statusFilter === 'all' ? true : j.status.toLowerCase() === statusFilter.toLowerCase();
     return matchesSearch && matchesStatus;
   });
+
+  const filteredUploads = uploadJobs.filter(u => {
+    const matchesSearch = u.file_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' ? true : u.status.toLowerCase() === statusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleDeleteUploadJob = async (id: string) => {
+    try {
+      const ok = await db.deleteProcessingJob(id);
+      if (ok) {
+        setUploadJobs(uploadJobs.filter(u => u.id !== id));
+      }
+    } catch {
+      setErrorMessage('Failed to delete uploaded video job entry.');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -350,6 +406,35 @@ export default function ProcessingJobsSection({ userId, selectedProjectId }: Pro
 
       {/* Filters and List */}
       <div className="space-y-4">
+
+        {/* Horizontal sub-tab selection switch */}
+        <div className="flex border-b border-purple-950/20 pb-0 gap-6">
+          <button
+            onClick={() => { setListType('pipelines'); setStatusFilter('all'); }}
+            type="button"
+            className="pb-3 text-xxs uppercase tracking-wider font-bold transition-all relative"
+          >
+            <span className={listType === 'pipelines' ? 'text-purple-300 font-extrabold' : 'text-slate-500 hover:text-slate-300'}>
+              Worker Pipelines ({jobs.length})
+            </span>
+            {listType === 'pipelines' && (
+              <motion.div layoutId="jobsTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
+            )}
+          </button>
+
+          <button
+            onClick={() => { setListType('uploads'); setStatusFilter('all'); }}
+            type="button"
+            className="pb-3 text-xxs uppercase tracking-wider font-bold transition-all relative"
+          >
+            <span className={listType === 'uploads' ? 'text-purple-300 font-extrabold' : 'text-slate-500 hover:text-slate-300'}>
+              Ingested Videos ({uploadJobs.length})
+            </span>
+            {listType === 'uploads' && (
+              <motion.div layoutId="jobsTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
+            )}
+          </button>
+        </div>
         <div className="flex flex-col sm:flex-row justify-between gap-3 font-mono">
           <input
             type="text"
@@ -382,92 +467,235 @@ export default function ProcessingJobsSection({ userId, selectedProjectId }: Pro
             <RotateCw className="h-6 w-6 text-purple-500 animate-spin mx-auto mb-2" />
             <p className="text-xxs text-slate-500">Querying status from scheduler database...</p>
           </div>
-        ) : filteredJobs.length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-purple-950/10 rounded-xl bg-slate-900/5 font-mono">
-            <Clock className="h-8 w-8 text-slate-600 mx-auto mb-3" />
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">No Active Jobs</h4>
-            <p className="text-xxs text-slate-500 max-w-sm mx-auto mt-1 px-4">
-              {searchTerm ? 'No jobs matched your current filter criteria.' : 'Create a workload above to watch jobs process and update in real-time.'}
-            </p>
-          </div>
-        ) : (
-          <div className="bg-slate-900/25 rounded-xl border border-purple-950/20 overflow-hidden font-mono">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-950/40 border-b border-purple-950/20 text-[10px] text-slate-450 uppercase tracking-widest font-bold">
-                    <th className="p-4">Worker / Task Identifiers</th>
-                    <th className="p-4">Linked Project</th>
-                    <th className="p-4">Pipeline node</th>
-                    <th className="p-4">Progress</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Schedule Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-purple-950/10 text-xxs">
-                  {filteredJobs.map((job) => {
-                    const linkedProj = projects.find(p => p.id === job.project_id);
-                    return (
-                      <tr 
-                        key={job.id}
-                        className="hover:bg-purple-950/10 transition group"
-                      >
-                        <td className="p-4">
-                          <div className="space-y-1">
-                            <span className="font-bold text-slate-100 group-hover:text-purple-300 transition block">{job.name}</span>
-                            <span className="text-[10px] text-slate-500 block">ID: {job.id.substring(0, 10)}...</span>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-slate-400 flex items-center space-x-1.5">
-                            <Folder className="h-3.5 w-3.5 text-purple-405/60" />
-                            <span>{linkedProj ? linkedProj.name : 'Unknown Workspace'}</span>
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className="px-2 py-0.5 rounded bg-slate-950 border border-purple-950/30 text-slate-350">{job.type}</span>
-                        </td>
-                        <td className="p-4 w-44">
-                          <div className="space-y-1.5">
-                            <span className="text-slate-400 text-[10px] block">{job.progress}% Complete</span>
-                            <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-purple-950/20">
-                              <div 
-                                className={`h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300 ${
-                                  job.status === 'Completed' ? 'from-emerald-500 to-teal-400' : ''
-                                }`} 
-                                style={{ width: `${job.progress}%` }} 
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <span className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wide text-[10px] ${
-                            job.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/10' :
-                            job.status === 'Processing' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10 animate-pulse' :
-                            job.status === 'Failed' ? 'bg-red-500/10 text-red-450 border border-red-500/10' :
-                            'bg-yellow-500/10 text-yellow-450 border border-yellow-500/10'
-                          }`}>
-                            <span>{job.status}</span>
-                          </span>
-                        </td>
-                        <td className="p-4 text-right">
-                          <button
-                            onClick={() => handleDeleteJob(job.id)}
-                            className="p-1 rounded hover:bg-red-950/30 hover:text-red-400 text-slate-500 transition border border-transparent hover:border-red-900/10"
-                            title="Delete Task Row"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        ) : listType === 'pipelines' ? (
+          filteredJobs.length === 0 ? (
+            <div className="text-center py-16 border border-dashed border-purple-950/10 rounded-xl bg-slate-900/5 font-mono">
+              <Clock className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">No Active Jobs</h4>
+              <p className="text-xxs text-slate-500 max-w-sm mx-auto mt-1 px-4">
+                {searchTerm ? 'No jobs matched your current filter criteria.' : 'Create a workload above to watch jobs process and update in real-time.'}
+              </p>
             </div>
-          </div>
+          ) : (
+            <div className="bg-slate-900/25 rounded-xl border border-purple-950/20 overflow-hidden font-mono">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-950/40 border-b border-purple-950/20 text-[10px] text-slate-450 uppercase tracking-widest font-bold">
+                      <th className="p-4">Worker / Task Identifiers</th>
+                      <th className="p-4">Linked Project</th>
+                      <th className="p-4">Pipeline node</th>
+                      <th className="p-4">Progress</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Schedule Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-purple-950/10 text-xxs">
+                    {filteredJobs.map((job) => {
+                      const linkedProj = projects.find(p => p.id === job.project_id);
+                      return (
+                        <tr 
+                          key={job.id}
+                          className="hover:bg-purple-950/10 transition group"
+                        >
+                          <td className="p-4">
+                            <div className="space-y-1">
+                              <span className="font-bold text-slate-100 group-hover:text-purple-300 transition block">{job.name}</span>
+                              <span className="text-[10px] text-slate-500 block">ID: {job.id.substring(0, 10)}...</span>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className="text-slate-400 flex items-center space-x-1.5">
+                              <Folder className="h-3.5 w-3.5 text-purple-405/60" />
+                              <span>{linkedProj ? linkedProj.name : 'Unknown Workspace'}</span>
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="px-2 py-0.5 rounded bg-slate-950 border border-purple-950/30 text-slate-350">{job.type}</span>
+                          </td>
+                          <td className="p-4 w-44">
+                            <div className="space-y-1.5">
+                              <span className="text-slate-400 text-[10px] block">{job.progress}% Complete</span>
+                              <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-purple-950/20">
+                                <div 
+                                  className={`h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300 ${
+                                    job.status === 'Completed' ? 'from-emerald-500 to-teal-400' : ''
+                                  }`} 
+                                  style={{ width: `${job.progress}%` }} 
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wide text-[10px] ${
+                              job.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/10' :
+                              job.status === 'Processing' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10 animate-pulse' :
+                              job.status === 'Failed' ? 'bg-red-500/10 text-red-505 border border-red-500/10' :
+                              'bg-yellow-500/10 text-yellow-450 border border-yellow-500/10'
+                            }`}>
+                              <span>{job.status}</span>
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => handleDeleteJob(job.id)}
+                              className="p-1 rounded hover:bg-red-950/30 hover:text-red-400 text-slate-500 transition border border-transparent hover:border-red-900/10"
+                              title="Delete Task Row"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        ) : (
+          /* Ingested Videos archive lists */
+          filteredUploads.length === 0 ? (
+            <div className="text-center py-16 border border-dashed border-purple-950/10 rounded-xl bg-slate-900/5 font-mono">
+              <FileVideo className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">No Ingested Videos</h4>
+              <p className="text-xxs text-slate-500 max-w-sm mx-auto mt-1 px-4">
+                {searchTerm ? 'No uploaded videos matched your search.' : 'Upload videos inside the Video Upload Center to populate your central ingested database archive.'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-slate-900/25 rounded-xl border border-purple-950/20 overflow-hidden font-mono">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-950/40 border-b border-purple-950/20 text-[10px] text-slate-450 uppercase tracking-widest font-bold">
+                      <th className="p-4">File Name Wrappers</th>
+                      <th className="p-4">Container size</th>
+                      <th className="p-4">Ingestion Date</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Schedule Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-purple-950/10 text-xxs">
+                    {filteredUploads.map((uje) => {
+                      return (
+                        <tr 
+                          key={uje.id}
+                          className="hover:bg-purple-950/10 transition group"
+                        >
+                          <td className="p-4">
+                            <div className="flex items-center space-x-2.5">
+                              <FileVideo className="h-4 w-4 text-purple-400 flex-shrink-0" />
+                              <div className="space-y-0.5 truncate max-w-xs">
+                                <span className="font-bold text-slate-100 group-hover:text-purple-300 transition block truncate">{uje.file_name}</span>
+                                <span className="text-[9px] text-slate-500 block font-mono">ID: {uje.id.substring(0, 10)}...</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-slate-400">
+                            {uje.file_size}
+                          </td>
+                          <td className="p-4 text-slate-400 text-xxs leading-normal">
+                            {new Date(uje.created_at || uje.uploaded_at).toLocaleDateString()} at {new Date(uje.created_at || uje.uploaded_at).toLocaleTimeString()}
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wide text-[10px] ${
+                              uje.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/10' :
+                              uje.status === 'Processing' ? 'bg-amber-500/10 text-amber-450 border border-amber-500/10 animate-pulse' :
+                              uje.status === 'Failed' ? 'bg-red-500/10 text-red-500 border border-red-500/10' :
+                              'bg-purple-500/10 text-purple-400 border border-purple-500/10'
+                            }`}>
+                              <span>{uje.status}</span>
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end space-x-2">
+                              {uje.status === 'Completed' && uje.url && (
+                                <button
+                                  onClick={() => {
+                                    setPreviewUrl(uje.url);
+                                    setPreviewName(uje.file_name);
+                                  }}
+                                  className="p-1 rounded bg-purple-950/30 hover:bg-purple-900 border border-purple-900/40 text-purple-300 hover:text-white transition"
+                                  title="Play ingested video"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteUploadJob(uje.id)}
+                                className="p-1 rounded hover:bg-red-950/30 hover:text-red-400 text-slate-500 transition border border-transparent hover:border-red-900/10"
+                                title="Delete Upload Row"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
         )}
       </div>
+
+      {/* Video Interactive Preview Dialog Modal */}
+      <AnimatePresence>
+        {previewUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
+            onClick={() => setPreviewUrl(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-900 border border-purple-900/40 rounded-xl overflow-hidden shadow-2xl max-w-2xl w-full"
+            >
+              <div className="bg-slate-950/80 px-4 py-3 border-b border-purple-950/20 flex justify-between items-center">
+                <span className="text-xxs font-bold text-slate-200 flex items-center space-x-2">
+                  <Play className="h-4 w-4 text-purple-400" />
+                  <span className="truncate max-w-sm uppercase">{previewName}</span>
+                </span>
+                <button
+                  onClick={() => setPreviewUrl(null)}
+                  className="text-xs text-slate-500 hover:text-white transition uppercase font-bold text-[10px]"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="bg-black p-2 aspect-video flex items-center justify-center">
+                <video
+                  src={previewUrl}
+                  controls
+                  autoPlay
+                  className="max-h-[380px] w-full object-contain"
+                />
+              </div>
+
+              <div className="bg-slate-950/50 p-3 flex justify-between items-center border-t border-purple-950/10">
+                <span className="text-[9px] text-slate-500 font-mono">Stream URL: {previewUrl.substring(0, 48)}...</span>
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[9px] text-white font-extrabold transition uppercase"
+                >
+                  Open Direct Link
+                </a>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

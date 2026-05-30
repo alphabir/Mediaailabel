@@ -58,6 +58,7 @@ export default function DataLabelingSection({ userId }: DataLabelingSectionProps
   const [exportFormat, setExportFormat] = useState<'yolo' | 'coco' | 'voc' | 'json'>('coco');
   const [generatedPayloads, setGeneratedPayloads] = useState<{ filename: string; text: string }[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [exportAnnotations, setExportAnnotations] = useState<DBAnnotation[]>([]);
 
   const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -424,21 +425,22 @@ export default function DataLabelingSection({ userId }: DataLabelingSectionProps
   };
 
   // GENERATE THE HIGHLY ACCURATE EXPORTS
-  const runExportCompile = () => {
+  const runExportCompile = async () => {
     if (!activeDataset) return;
-    setShowExportModal(true);
-    compilePayloadsForFormat(exportFormat);
+    try {
+      const allAnns = await db.getDatasetAnnotations(activeDataset.id);
+      setExportAnnotations(allAnns);
+      setShowExportModal(true);
+      compilePayloadsForFormat(exportFormat, allAnns);
+    } catch (err) {
+      console.error('Error fetching annotations for export:', err);
+    }
   };
 
-  const compilePayloadsForFormat = (format: 'yolo' | 'coco' | 'voc' | 'json') => {
+  const compilePayloadsForFormat = (format: 'yolo' | 'coco' | 'voc' | 'json', allAnns: DBAnnotation[]) => {
     if (!activeDataset || datasetItems.length === 0) return;
 
     let payloads: { filename: string; text: string }[] = [];
-
-    // Let's gather all annotations mapped across standard datasets components
-    // Map of itemId -> annotations
-    const cache = localStorage.getItem('mediaforge_db_annotations');
-    const allAnns: DBAnnotation[] = cache ? JSON.parse(cache) : [];
 
     if (format === 'yolo') {
       // YOLO Format: exports dataset.yaml definition file AND sample individual labels txt file
@@ -628,9 +630,9 @@ export default function DataLabelingSection({ userId }: DataLabelingSectionProps
 
   useEffect(() => {
     if (showExportModal) {
-      compilePayloadsForFormat(exportFormat);
+      compilePayloadsForFormat(exportFormat, exportAnnotations);
     }
-  }, [exportFormat]);
+  }, [exportFormat, exportAnnotations, showExportModal]);
 
   const handleCopyText = (text: string, index: number) => {
     navigator.clipboard.writeText(text);

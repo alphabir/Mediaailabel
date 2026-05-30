@@ -119,3 +119,21 @@ $$ language plpgsql security definer;
 create or replace trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+
+-- 7. Create Processing Jobs Table (Video Upload Center)
+create table public.processing_jobs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.users(id) on delete cascade not null,
+  file_name text not null,
+  file_size text not null,
+  uploaded_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  status text default 'Pending' check (status in ('Pending', 'Processing', 'Completed', 'Failed')),
+  url text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.processing_jobs enable row level security;
+
+create policy "Users can manage their own processing jobs" on public.processing_jobs
+  for all using (auth.uid() = user_id);

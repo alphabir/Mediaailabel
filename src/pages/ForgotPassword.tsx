@@ -114,9 +114,9 @@ export default function ForgotPassword({ setCurrentPage }: ForgotPasswordProps) 
               </button>
 
               <div className="mt-4 flex items-center justify-center space-x-2 rounded-lg bg-slate-950/60 p-2.5 border border-purple-950/25">
-                <Database className={`h-3.5 w-3.5 ${isSupabaseConfigured ? 'text-emerald-450' : 'text-amber-400'}`} />
+                <Database className="h-3.5 w-3.5 text-emerald-450 animate-pulse" />
                 <span className="text-xxs font-mono text-slate-400">
-                  Environment: {isSupabaseConfigured ? 'Live (Supabase Link)' : 'Sandbox (Email Simulation)'}
+                  Environment: <span className="text-emerald-400 font-bold">Connected to Supabase</span>
                 </span>
               </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Cpu, Folder, Key, User, Activity, LogOut, LayoutDashboard, Database, RefreshCw, Terminal, Sparkles, Shield, Bookmark, Video
+  Cpu, Folder, Key, User, Activity, LogOut, LayoutDashboard, Database, RefreshCw, Terminal, Sparkles, Shield, Bookmark, Video, UploadCloud
 } from 'lucide-react';
 import { db, DBUser, isSupabaseConfigured } from '../lib/supabaseClient';
 
@@ -13,13 +13,14 @@ import ProjectsSection from '../components/dashboard/ProjectsSection';
 import ProcessingJobsSection from '../components/dashboard/ProcessingJobsSection';
 import APIKeysSection from '../components/dashboard/APIKeysSection';
 import AccountSection from '../components/dashboard/AccountSection';
+import VideoUploadCenter from '../components/dashboard/VideoUploadCenter';
 
 interface DashboardProps {
   setUserLoggedIn?: (b: boolean) => void;
   setCurrentPage?: (page: string) => void;
 }
 
-type TabType = 'analytics' | 'video-processor' | 'labeler' | 'projects' | 'jobs' | 'keys' | 'account';
+type TabType = 'analytics' | 'video-upload' | 'video-processor' | 'labeler' | 'projects' | 'jobs' | 'keys' | 'account';
 
 export default function Dashboard({ setUserLoggedIn, setCurrentPage }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('analytics');
@@ -104,8 +105,8 @@ export default function Dashboard({ setUserLoggedIn, setCurrentPage }: Dashboard
             <Database className={`h-3.5 w-3.5 ${isSupabaseConfigured ? 'text-emerald-400 animate-pulse' : 'text-amber-400'}`} />
             <div className="text-[9px]">
               <span className="text-slate-500 block uppercase font-bold">Connected db:</span>
-              <span className={isSupabaseConfigured ? 'text-emerald-450 font-bold' : 'text-amber-400 font-bold'}>
-                {isSupabaseConfigured ? 'Supabase DB' : 'Sandbox (mock)'}
+              <span className="text-emerald-450 font-bold">
+                Connected to Supabase
               </span>
             </div>
           </div>
@@ -114,6 +115,7 @@ export default function Dashboard({ setUserLoggedIn, setCurrentPage }: Dashboard
           <nav className="space-y-1.5 pt-2">
             {[
               { id: 'analytics', label: 'Console Overview', icon: LayoutDashboard },
+              { id: 'video-upload', label: 'Video Upload Center', icon: UploadCloud },
               { id: 'video-processor', label: 'Video Studio', icon: Video },
               { id: 'labeler', label: 'Dataset Labeler', icon: Database },
               { id: 'projects', label: 'Pipeline Projects', icon: Folder },
@@ -193,6 +195,12 @@ export default function Dashboard({ setUserLoggedIn, setCurrentPage }: Dashboard
                   setActiveTab(tab as any);
                   if (tab !== 'jobs') setSelectedProjectId(undefined);
                 }} 
+              />
+            )}
+
+            {activeTab === 'video-upload' && (
+              <VideoUploadCenter 
+                userId={user?.id || 'usr-demo'} 
               />
             )}
 

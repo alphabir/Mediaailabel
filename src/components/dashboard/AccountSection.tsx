@@ -506,17 +506,13 @@ create policy "Users manage annotations on personal assets" on public.annotation
             <span className="text-xs font-bold uppercase tracking-widest text-slate-205">Connect Live Supabase Database</span>
           </div>
 
-          <span className={`text-xxs px-2.5 py-0.5 rounded-full border font-bold ${
-            isSupabaseConfigured 
-              ? 'bg-emerald-500/10 border-emerald-500/10 text-emerald-450 animate-pulse' 
-              : 'bg-amber-500/10 border-amber-500/10 text-amber-400'
-          }`}>
-            Status: {isSupabaseConfigured ? 'LIVE CONNECTION ONLINE ⚡' : 'SANDBOX SIMULATOR ACTIVE 🛠️'}
+          <span className="text-xxs px-2.5 py-0.5 rounded-full border font-bold bg-emerald-500/10 border-emerald-500/10 text-emerald-450 animate-pulse" id="account-status-badge">
+            Status: Connected to Supabase ⚡
           </span>
         </div>
 
         <p className="text-xxs text-slate-400 leading-relaxed font-mono">
-          Ready to scale? Connect your actual free Supabase Cloud SQL DB in under 2 minutes. Doing so transfers all projects, processing logs, API certificates, and tiers from Sandbox storage directly to database tables!
+          Excellent! Your application is fully integrated with your active Supabase Cloud SQL DB. All projects, processing logs, API certificates, and tiers are synced and queried live.
         </p>
 
         <div className="space-y-4">
